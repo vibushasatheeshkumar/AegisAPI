@@ -1,0 +1,147 @@
+# Example OpenAPI 3.0 specification for trying 'aegisapi discover spec'.
+#
+# Nothing here is contacted: the file is parsed locally, and the declared
+# server is only used to work out which URLs the operations would live at.
+#
+#   aegisapi target add demo https://api.example.test/v1
+#   aegisapi discover spec demo --file examples\petstore-openapi.yaml
+#
+# The /internal path is declared but will fall outside a target scoped with
+# --exclude-path /v1/internal, which is the point: AegisAPI shows you what a
+# specification declares beyond your engagement rather than hiding it.
+openapi: 3.0.3
+info:
+  title: Example Pet Store
+  version: "1.0"
+  description: A small specification used to demonstrate discovery.
+servers:
+  - url: https://api.example.test/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: pets
+  - name: owners
+paths:
+  /pets:
+    parameters:
+      - name: X-Request-Id
+        in: header
+        required: false
+        schema:
+          type: string
+    get:
+      operationId: listPets
+      summary: List pets
+      tags: [pets]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A page of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pet"
+    post:
+      operationId: createPet
+      tags: [pets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Pet"
+      responses:
+        "201":
+          description: Created
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getPet
+      tags: [pets]
+      responses:
+        "200":
+          description: One pet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+    delete:
+      operationId: deletePet
+      tags: [pets]
+      responses:
+        "204":
+          description: Deleted
+  /pets/{petId}/owners:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listPetOwners
+      tags: [owners]
+      responses:
+        "200":
+          description: Owners of a pet
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Owner"
+  /health:
+    get:
+      operationId: health
+      # security: [] states that this operation needs no authentication. That
+      # is a declaration, not a verified fact.
+      security: []
+      responses:
+        "200":
+          description: OK
+  /internal/metrics:
+    get:
+      operationId: metrics
+      responses:
+        "200":
+          description: Internal metrics
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Pet:
+      type: object
+      required: [petId, name]
+      properties:
+        petId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        owner:
+          $ref: "#/components/schemas/Owner"
+    Owner:
+      type: object
+      required: [ownerId]
+      properties:
+        ownerId:
+          type: string
+          format: uuid
+        email:
+          type: string

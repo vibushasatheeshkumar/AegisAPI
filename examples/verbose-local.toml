@@ -1,0 +1,13 @@
+# Example: verbose settings for developing AegisAPI against a local mock API.
+#
+# Debug logging is noisy by design. Scope enforcement remains enabled, with
+# only loopback names allowed, so a misconfiguration cannot reach the internet.
+
+log_level = "DEBUG"
+request_timeout_seconds = 5.0
+max_concurrency = 1
+default_report_format = "json"
+
+[scope]
+enforce = true
+allowed_hosts = ["localhost", "127.0.0.1"]

@@ -1,0 +1,194 @@
+openapi: "3.0.3"
+info:
+  title: crAPI Workshop + Identity API
+  description: >
+    Minimal OpenAPI 3.0 specification for OWASP crAPI v1.1.6 derived from
+    verified Django URL router and view source code read from the running
+    crapi-workshop and crapi-identity Docker containers.
+    Generated for AegisAPI M9.4 justified correction (spec-based BOLA coverage).
+  version: "1.1.6"
+servers:
+  - url: http://127.0.0.1:8888
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ---- Identity service -------------------------------------------------
+  /identity/api/auth/login:
+    post:
+      operationId: identity_login
+      summary: Authenticate and obtain a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: {type: string}
+                password: {type: string}
+              required: [email, password]
+      responses:
+        "200":
+          description: JWT token
+        "400":
+          description: Invalid credentials
+
+  /identity/api/auth/signup:
+    post:
+      operationId: identity_signup
+      summary: Register a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Account created
+        "400":
+          description: Validation error
+
+  /identity/api/v2/user/dashboard:
+    get:
+      operationId: identity_dashboard
+      summary: Get the authenticated user's profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile including email, phone, credit balance
+
+  /identity/api/v2/vehicle/vehicles:
+    get:
+      operationId: identity_list_vehicles
+      summary: List the authenticated user's registered vehicles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Vehicle list
+
+  /identity/api/v2/vehicle/add_vehicle:
+    post:
+      operationId: identity_add_vehicle
+      summary: Register a new vehicle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Vehicle added
+
+  # ---- Workshop shop service --------------------------------------------
+  /workshop/api/shop/products:
+    get:
+      operationId: shop_list_products
+      summary: List all shop products
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Product catalogue
+
+  /workshop/api/shop/orders/all:
+    get:
+      operationId: shop_list_orders
+      summary: List all orders for the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Order list
+
+  /workshop/api/shop/orders/{order_id}:
+    get:
+      operationId: shop_get_order
+      summary: Get a single order by ID
+      description: >
+        Returns the full order record for the given order_id.
+        BOLA target: order_id is not validated against the requesting user's
+        identity, allowing cross-user access (confirmed: M9.2 manual test).
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Order details including owner email and phone
+
+  # ---- Workshop mechanic service ----------------------------------------
+  /workshop/api/mechanic/service_requests:
+    get:
+      operationId: mechanic_list_service_requests
+      summary: List mechanic service requests (mechanic/admin role required)
+      description: >
+        Returns service requests for the calling mechanic user.
+        BFLA target: MechanicServiceRequestsView uses only @jwt_auth_required
+        with no role check; regular users receive HTTP 200 with empty list.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Service request list (empty for non-mechanics)
+        "403":
+          description: Expected but not enforced — regular users not blocked
+
+  /workshop/api/mechanic:
+    get:
+      operationId: mechanic_list
+      summary: List all mechanics (mechanic/admin role required)
+      description: >
+        Returns full mechanic list. BFLA target: MechanicView uses only
+        @jwt_auth_required with no role check; regular users receive HTTP 301
+        (redirect to /workshop/api/mechanic/).
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Mechanic list (expected only for mechanic role)
+        "301":
+          description: Redirect to /workshop/api/mechanic/
+        "403":
+          description: Expected but not enforced
+
+  # ---- Community service (stub) -----------------------------------------
+  /community/api/v2/community/posts/{post_id}:
+    get:
+      operationId: community_get_post
+      summary: Get a community post by ID
+      description: >
+        Community Go stub — returns HTTP 200 for any sub-path under /posts/.
+        Not a real BOLA target; stub does not store user data.
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Post data (stub response)

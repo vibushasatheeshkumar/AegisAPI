@@ -1,0 +1,47 @@
+{
+  "identities": [
+    {
+      "name": "alice",
+      "role": "user",
+      "description": "Victim account (id=8). Owns vehicle ecb9e850-e5d2-4623-9a55-a4fe842f1a30 and shop order 6.",
+      "auth": {
+        "method": "bearer",
+        "token": {"variable": "CRAPI_ALICE_TOKEN"}
+      }
+    },
+    {
+      "name": "bob",
+      "role": "user",
+      "description": "Attacker account (id=9). Has no ownership of alice's resources.",
+      "auth": {
+        "method": "bearer",
+        "token": {"variable": "CRAPI_BOB_TOKEN"}
+      }
+    }
+  ],
+  "objects": [
+    {
+      "owner": "alice",
+      "parameter": "order_id",
+      "value": "6",
+      "description": "Alice's Seat purchase (product_id=1). Confirmed: bob receives HTTP 200 with alice's email+phone. BOLA-001 target."
+    }
+  ],
+  "expectations": [
+    {
+      "identity": "alice",
+      "path": "/workshop/api/mechanic/",
+      "method": "GET",
+      "allowed": false,
+      "reason": "Regular users must not list all mechanics. Confirmed: HTTP 200 returned. BFLA-001 target."
+    },
+    {
+      "identity": "bob",
+      "path": "/workshop/api/mechanic/",
+      "method": "GET",
+      "allowed": false,
+      "reason": "Regular users must not list all mechanics. Confirmed: HTTP 200 returned. BFLA-001 target."
+    }
+  ],
+  "allow_write_methods": false
+}

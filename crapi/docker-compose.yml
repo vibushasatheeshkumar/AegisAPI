@@ -1,0 +1,293 @@
+# crAPI v1.1.6 — AegisAPI M9 local lab
+#
+# Source:  https://github.com/OWASP/crAPI/blob/v1.1.6/deploy/docker/docker-compose.yml
+# Git tag: v1.1.6  (released 2025-09-30)
+# SHA:     see https://github.com/OWASP/crAPI/releases/tag/v1.1.6
+#
+# Modifications from upstream:
+#   - crapi-chatbot and chromadb services are disabled (require OPENAI_API_KEY;
+#     not needed for API security assessment with AegisAPI)
+#   - api.mypremiumdealership.com (gateway-service) is disabled (secondary
+#     target; re-enable once the core stack is validated)
+#   - TLS_ENABLED=false in .env (simpler local HTTP for assessment workflow)
+#   - All ports remain bound to 127.0.0.1 (LISTEN_IP default) — no public exposure
+#
+# Image pinning note:
+#   crapi/* images use VERSION=latest as published at the v1.1.6 release cut.
+#   Infrastructure images are version-pinned: postgres:14, mongo:4.4.
+#   crapi image digests can be locked with 'docker compose pull && docker
+#   compose images --digests' after first pull.
+#
+# Licensed under the Apache License, Version 2.0
+
+services:
+
+  crapi-identity:
+    container_name: crapi-identity
+    image: crapi/crapi-identity:${VERSION:-latest}
+    volumes:
+      - ./keys:/app/keys
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DB_NAME=crapi
+      - DB_USER=admin
+      - DB_PASSWORD=crapisecretpassword
+      - DB_HOST=postgresdb
+      - DB_PORT=5432
+      - SERVER_PORT=${IDENTITY_SERVER_PORT:-8080}
+      - ENABLE_SHELL_INJECTION=${ENABLE_SHELL_INJECTION:-false}
+      - JWT_SECRET=crapi
+      - MAILHOG_HOST=mailhog
+      - MAILHOG_PORT=1025
+      - MAILHOG_DOMAIN=example.com
+      - SMTP_HOST=smtp.example.com
+      - SMTP_PORT=587
+      - SMTP_EMAIL=user@example.com
+      - SMTP_PASS=xxxxxxxxxxxxxx
+      - SMTP_FROM=no-reply@example.com
+      - SMTP_AUTH=true
+      - SMTP_STARTTLS=true
+      - JWT_EXPIRATION=604800000
+      - ENABLE_LOG4J=${ENABLE_LOG4J:-false}
+      - API_GATEWAY_URL=https://api.mypremiumdealership.com
+      - TLS_ENABLED=${TLS_ENABLED:-false}
+      - TLS_KEYSTORE_TYPE=PKCS12
+      - TLS_KEYSTORE=classpath:certs/server.p12
+      - TLS_KEYSTORE_PASSWORD=passw0rd
+      - TLS_KEY_PASSWORD=passw0rd
+      - TLS_KEY_ALIAS=identity
+    depends_on:
+      postgresdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      mailhog:
+        condition: service_healthy
+    healthcheck:
+      test: /app/health.sh
+      interval: 15s
+      timeout: 15s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '0.8'
+          memory: 384M
+
+  crapi-community:
+    container_name: crapi-community
+    # crapi/crapi-community:latest (v1.1.6) ships a 0-byte /app/main binary —
+    # an upstream build defect. The stub image is built locally from
+    # crapi-community-stub/main.go: a minimal Go HTTP server on port 8087
+    # that satisfies all health checks and returns valid JSON for community
+    # API paths, allowing crapi-workshop and crapi-web to start and function.
+    image: crapi/crapi-community:stub
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - IDENTITY_SERVICE=crapi-identity:${IDENTITY_SERVER_PORT:-8080}
+      - DB_NAME=crapi
+      - DB_USER=admin
+      - DB_PASSWORD=crapisecretpassword
+      - DB_HOST=postgresdb
+      - DB_PORT=5432
+      - SERVER_PORT=${COMMUNITY_SERVER_PORT:-8087}
+      - MONGO_DB_HOST=mongodb
+      - MONGO_DB_PORT=27017
+      - MONGO_DB_USER=admin
+      - MONGO_DB_PASSWORD=crapisecretpassword
+      - MONGO_DB_NAME=crapi
+      - TLS_ENABLED=${TLS_ENABLED:-false}
+      - TLS_CERTIFICATE=certs/server.crt
+      - TLS_KEY=certs/server.key
+    depends_on:
+      postgresdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      crapi-identity:
+        condition: service_healthy
+    healthcheck:
+      test: /app/health.sh
+      interval: 15s
+      timeout: 15s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 192M
+
+  crapi-workshop:
+    container_name: crapi-workshop
+    image: crapi/crapi-workshop:${VERSION:-latest}
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - IDENTITY_SERVICE=crapi-identity:${IDENTITY_SERVER_PORT:-8080}
+      - DB_NAME=crapi
+      - DB_USER=admin
+      - DB_PASSWORD=crapisecretpassword
+      - DB_HOST=postgresdb
+      - DB_PORT=5432
+      - SERVER_PORT=${WORKSHOP_SERVER_PORT:-8000}
+      - MONGO_DB_HOST=mongodb
+      - MONGO_DB_PORT=27017
+      - MONGO_DB_USER=admin
+      - MONGO_DB_PASSWORD=crapisecretpassword
+      - MONGO_DB_NAME=crapi
+      - SECRET_KEY=crapi
+      - API_GATEWAY_URL=https://api.mypremiumdealership.com
+      - TLS_ENABLED=${TLS_ENABLED:-false}
+      - TLS_CERTIFICATE=certs/server.crt
+      - TLS_KEY=certs/server.key
+      - FILES_LIMIT=1000
+    depends_on:
+      postgresdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      crapi-identity:
+        condition: service_healthy
+      crapi-community:
+        condition: service_healthy
+    healthcheck:
+      test: /app/health.sh
+      interval: 15s
+      timeout: 15s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 128M
+
+  # crapi-web's Nginx config has a hard-coded upstream for crapi-chatbot.
+  # Nginx fails to start if the hostname doesn't resolve at startup, even when
+  # chatbot routes are never hit.  This stub registers the name in Docker DNS
+  # so Nginx starts cleanly; actual chatbot requests will 502.
+  # chromadb (vector store) is not needed here and stays disabled.
+  crapi-chatbot:
+    container_name: crapi-chatbot
+    image: alpine:3.21
+    command: ["sh", "-c", "trap '' TERM; sleep infinity"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.05'
+          memory: 16M
+
+  # chromadb:
+  #   container_name: chromadb
+  #   image: chromadb/chroma:latest
+  #   ...
+
+  crapi-web:
+    container_name: crapi-web
+    image: crapi/crapi-web:${VERSION:-latest}
+    ports:
+      - "${LISTEN_IP:-127.0.0.1}:8888:80"
+      - "${LISTEN_IP:-127.0.0.1}:30080:80"
+      - "${LISTEN_IP:-127.0.0.1}:8443:443"
+      - "${LISTEN_IP:-127.0.0.1}:30443:443"
+    environment:
+      - COMMUNITY_SERVICE=crapi-community:${COMMUNITY_SERVER_PORT:-8087}
+      - IDENTITY_SERVICE=crapi-identity:${IDENTITY_SERVER_PORT:-8080}
+      - WORKSHOP_SERVICE=crapi-workshop:${WORKSHOP_SERVER_PORT:-8000}
+      - CHATBOT_SERVICE=crapi-chatbot:${CHATBOT_SERVER_PORT:-5002}
+      - MAILHOG_WEB_SERVICE=mailhog:8025
+      - TLS_ENABLED=${TLS_ENABLED:-false}
+    depends_on:
+      crapi-community:
+        condition: service_healthy
+      crapi-identity:
+        condition: service_healthy
+      crapi-workshop:
+        condition: service_healthy
+    healthcheck:
+      test: curl 0.0.0.0:80/health
+      interval: 15s
+      timeout: 15s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 128M
+
+  postgresdb:
+    container_name: postgresdb
+    image: 'postgres:14'
+    command: ["postgres", "-c", "max_connections=500"]
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: crapisecretpassword
+      POSTGRES_DB: crapi
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 15s
+      timeout: 15s
+      retries: 15
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data/
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  mongodb:
+    container_name: mongodb
+    image: 'mongo:4.4'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: crapisecretpassword
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo mongodb:27017/test --quiet
+      interval: 15s
+      timeout: 15s
+      retries: 15
+      start_period: 20s
+    volumes:
+      - mongodb-data:/data/db
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 128M
+
+  mailhog:
+    # crapi/mailhog:latest has a broken binary (exec format error) on x86_64 hosts.
+    # axllent/mailpit is a drop-in replacement: same ports (1025 SMTP, 8025 UI),
+    # same healthcheck, no broken binary.  crapi-identity sends to mailhog:1025
+    # (SMTP) which mailpit handles identically.
+    container_name: mailhog
+    image: axllent/mailpit:v1.21.6
+    ports:
+      - "${LISTEN_IP:-127.0.0.1}:8025:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - mailpit-data:/data
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "8025" ]
+      interval: 15s
+      timeout: 15s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+
+  # api.mypremiumdealership.com (gateway-service) is DISABLED in this lab profile.
+  # It is a secondary BOLA target. Re-enable once the core stack is validated.
+  #
+  # api.mypremiumdealership.com:
+  #   container_name: api.mypremiumdealership.com
+  #   image: crapi/gateway-service:${VERSION:-latest}
+  #   ...
+
+volumes:
+  mongodb-data:
+  postgresql-data:
+  mailpit-data:

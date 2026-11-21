@@ -1,0 +1,17 @@
+# Example: a tightly scoped engagement configuration.
+#
+# Use this shape when you have written authorisation for a specific set of
+# hosts. Scope enforcement stays on, the allow-list is explicit, and
+# concurrency is kept low to avoid disrupting the target.
+#
+# Copy it over <workspace>/config.toml, or point AegisAPI at it directly:
+#   aegisapi --config examples\strict-scope.toml info
+
+log_level = "INFO"
+request_timeout_seconds = 15.0
+max_concurrency = 2
+default_report_format = "html"
+
+[scope]
+enforce = true
+allowed_hosts = ["api.example.com", "staging-api.example.com"]

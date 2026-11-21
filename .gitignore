@@ -1,0 +1,44 @@
+# Byte-compiled / cached
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging / distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local environment and editor settings
+.env
+.vscode/
+.idea/
+
+# Local assessment artefacts - never commit evidence, logs, or reports
+*.log
+logs/
+reports/
+evidence/
+assessments/
+
+# crAPI lab secrets — tokens and passwords
+crapi/.env.secrets
+*.env.secrets
+
+# Generated scan reports and loose artefacts at repo root
+aegisapi-*.json
+aegisapi-*.html
+lab-openapi.json
